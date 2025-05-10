@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-slate-100 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Chat Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom scrollbar */
+        .chat-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-container::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.1);
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background-color: rgba(148, 163, 184, 0.4);
+            border-radius: 20px;
+        }
+        .dark .chat-container::-webkit-scrollbar-thumb {
+            background-color: rgba(100, 116, 139, 0.5);
+        }
+
+        /* Typing indicator animation */
+        @keyframes blink {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+        .typing-dot {
+            animation: blink 1.5s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        /* Toast animations */
+        @keyframes slideIn {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+        .toast.hide {
+            animation: fadeOut 0.3s ease-in forwards;
+        }
+
+        /* Message transitions */
+        .message {
+            transition: all 0.3s ease;
+            transform-origin: bottom;
+        }
+        .message-enter {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .message-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Prose styling for medical reports */
+        .prose-medical {
+            max-width: 100%;
+            color: inherit;
+        }
+        .prose-medical h3 {
+            font-weight: 600;
+            font-size: 1.125rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose-medical p {
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .prose-medical ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col transition-colors duration-300">
+    <!-- Navbar -->
+    <nav class="bg-white dark:bg-slate-800 shadow-sm py-4 px-6 flex items-center justify-between sticky top-0 z-10">
+        <div class="flex items-center space-x-4">
+            <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
+                <i class="fas fa-heartbeat text-xl"></i>
+            </div>
+            <h1 class="text-xl font-semibold">Medical Chat Assistant</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="darkModeToggle" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                <i class="fas fa-moon dark:hidden"></i>
+                <i class="fas fa-sun hidden dark:inline"></i>
+            </button>
+            <button class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center space-x-2" onclick="window.location.href='/'">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto px-4 py-6 flex flex-col max-w-4xl">
+        <!-- Chat Container -->
+        <div class="chat-container flex-1 bg-white dark:bg-slate-800 rounded-xl shadow-md p-4 mb-4 overflow-y-auto max-h-[70vh]">
+            <!-- Initial Message -->
+            <div class="message mb-4">
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-500 dark:text-blue-300">
+                        <i class="fas fa-user-md"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="bg-blue-50 dark:bg-slate-700 rounded-lg p-3 max-w-[85%]">
+                            <p class="text-sm font-medium text-blue-600 dark:text-blue-300 mb-1">Medical Assistant</p>
+                            <p class="text-slate-700 dark:text-slate-200">Hello! I'm your medical chat assistant. Type 'New case' to start a new patient record.</p>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-1" data-timestamp></p>
+                    </div>
+                </div>
+            </div>
+            <!-- Typing Indicator -->
+            <div id="typingIndicator" class="hidden mb-4">
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-500 dark:text-blue-300">
+                        <i class="fas fa-user-md"></i>
+                    </div>
+                    <div class="bg-blue-50 dark:bg-slate-700 rounded-lg p-3 max-w-[85%]">
+                        <div class="flex space-x-1">
+                            <div class="typing-dot w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-300"></div>
+                            <div class="typing-dot w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-300"></div>
+                            <div class="typing-dot w-2 h-2 rounded-full bg-blue-400 dark:bg-blue-300"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-md p-4">
+            <div class="flex items-end space-x-2">
+                <div class="flex-1">
+                    <textarea id="messageInput" rows="2" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 resize-none" placeholder="Type 'New case' or your response..."></textarea>
+                </div>
+                <div class="flex space-x-2">
+                    <button id="sendButton" class="w-12 h-12 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center justify-center">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                    <button id="downloadButton" class="w-12 h-12 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center justify-center hidden">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
+
+    <script>
+        let step = -1;
+        let answers = {};
+        const keys = ["name", "age", "complaint_duration", "key_findings_vitals", "relevant_history"];
+        let reportHtml = "";
+
+        // Dark mode toggle
+        document.getElementById('darkModeToggle').addEventListener('click', function() {
+            document.documentElement.classList.toggle('dark');
+            localStorage.setItem('darkMode', document.documentElement.classList.contains('dark'));
+        });
+
+        // Check for saved dark mode preference
+        if (localStorage.getItem('darkMode') === 'true') {
+            document.documentElement.classList.add('dark');
+        }
+
+        // Auto-scroll to bottom of chat
+        function scrollToBottom() {
+            const chatContainer = document.querySelector('.chat-container');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            document.getElementById('typingIndicator').classList.remove('hidden');
+            scrollToBottom();
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            document.getElementById('typingIndicator').classList.add('hidden');
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toastContainer = document.getElementById('toastContainer');
+            const toastId = 'toast-' + Date.now();
+            
+            let icon, bgColor;
+            switch(type) {
+                case 'success':
+                    icon = 'fas fa-check-circle';
+                    bgColor = 'bg-green-500';
+                    break;
+                case 'error':
+                    icon = 'fas fa-exclamation-circle';
+                    bgColor = 'bg-red-500';
+                    break;
+                default:
+                    icon = 'fas fa-info-circle';
+                    bgColor = 'bg-blue-500';
+            }
+            
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2 max-w-xs`;
+            toast.innerHTML = `
+                <i class="${icon}"></i>
+                <span>${message}</span>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('hide');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Add message to chat
+        function addMessage(sender, content, isReport = false) {
+            const chatContainer = document.querySelector('.chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message mb-4 message-enter';
+            const timestamp = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            if (sender === 'You') {
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3 justify-end">
+                        <div class="flex-1 flex justify-end">
+                            <div class="bg-blue-500 text-white rounded-lg p-3 max-w-[85%]">
+                                <p class="text-sm font-medium text-blue-100 mb-1">You</p>
+                                <p>${escapeHTML(content)}</p>
+                            </div>
+                        </div>
+                        <div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 text-right mr-1">${timestamp}</p>
+                `;
+            } else {
+                const contentClass = isReport ? 'prose-medical' : '';
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-500 dark:text-blue-300">
+                            <i class="fas fa-user-md"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="bg-blue-50 dark:bg-slate-700 rounded-lg p-3 max-w-[85%]">
+                                <p class="text-sm font-medium text-blue-600 dark:text-blue-300 mb-1">Medical Assistant</p>
+                                <div class="${contentClass}">${content}</div>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-1">${timestamp}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            setTimeout(() => messageDiv.classList.add('message-enter-active'), 10);
+            scrollToBottom();
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // Handle send message
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            addMessage('You', message);
+            input.value = '';
+            showTypingIndicator();
+            document.getElementById('sendButton').disabled = true;
+
+            try {
+                if (step === -1 && message.toLowerCase() === 'new case') {
+                    step = 0;
+                    await getNextQuestion();
+                } else if (step >= 0 && step < keys.length) {
+                    answers[keys[step]] = message;
+                    step++;
+                    await getNextQuestion();
+                } else {
+                    addMessage('Medical Assistant', "Please type 'New case' to start a new patient record.");
+                    hideTypingIndicator();
+                    document.getElementById('sendButton').disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Medical Assistant', 'Sorry, something went wrong. Please try again.');
+                showToast('Error communicating with server', 'error');
+                hideTypingIndicator();
+                document.getElementById('sendButton').disabled = false;
+            }
+        }
+
+        // Fetch next question or generate report
+        async function getNextQuestion() {
+            try {
+                const response = await axios.post('/get_question', { step });
+                if (!response.data.done) {
+                    addMessage('Medical Assistant', response.data.question);
+                    hideTypingIndicator();
+                    document.getElementById('sendButton').disabled = false;
+                } else {
+                    addMessage('Medical Assistant', 'Generating medical report...');
+                    const reportResponse = await axios.post('/generate_report', { answers });
+                    if (reportResponse.data.success) {
+                        reportHtml = reportResponse.data.report;
+                        addMessage('Medical Assistant', reportHtml, true);
+                        document.getElementById('downloadButton').classList.remove('hidden');
+                        showToast('Report generated successfully', 'success');
+                    } else {
+                        addMessage('Medical Assistant', `Error generating report: ${reportResponse.data.error}`);
+                        showToast('Error generating report', 'error');
+                    }
+                    hideTypingIndicator();
+                    document.getElementById('sendButton').disabled = false;
+                    step = -1;
+                    answers = {};
+                }
+            } catch (error) {
+                console.error('Error fetching question:', error);
+                addMessage('Medical Assistant', 'Error connecting to server. Please try again.');
+                showToast('Error fetching question', 'error');
+                hideTypingIndicator();
+                document.getElementById('sendButton').disabled = false;
+            }
+        }
+
+        // Download PDF
+        document.getElementById('downloadButton').addEventListener('click', async () => {
+            if (!reportHtml) {
+                showToast('No report available to download', 'error');
+                return;
+            }
+
+            showToast('Generating PDF...', 'info');
+            try {
+                const response = await axios.post('/download_pdf', { html: reportHtml }, { responseType: 'blob' });
+                const blob = new Blob([response.data], { type: 'application/pdf' });
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'medical_report.pdf';
+                link.click();
+                window.URL.revokeObjectURL(url);
+                showToast('PDF downloaded successfully', 'success');
+            } catch (error) {
+                console.error('Error downloading PDF:', error);
+                showToast('Error downloading PDF', 'error');
+            }
+        });
+
+        // Event listeners
+        document.getElementById('sendButton').addEventListener('click', sendMessage);
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Set initial timestamp
+        document.querySelector('[data-timestamp]').textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+        // Initial scroll
+        scrollToBottom();
+    </script>
+</body>
+</html>

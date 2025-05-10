@@ -1,0 +1,6 @@
+flask
+langchain
+langchain-google-genai
+python-dotenv
+gunicorn
+xhtml2pdf
